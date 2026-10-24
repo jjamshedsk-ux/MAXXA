@@ -7,15 +7,19 @@ on:
       - 'MAXXA_AI_Project.zip'
       - '.github/workflows/android.yml'
 
+permissions:
+  contents: read
+
 jobs:
   build:
+    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -32,11 +36,16 @@ jobs:
           packages: 'platform-tools'
 
       - name: Install Android SDK packages
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+        run: |
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          yes | sdkmanager --licenses
 
-            - name: Extract MAXXA AI project
-        run: unzip -o MAXXA_AI_Project.zip
-        - name: Fix Java and Kotlin targets
+      - name: Extract MAXXA AI project
+        run: |
+          unzip -o MAXXA_AI_Project.zip
+          test -f MAXXA_AI_Project/app/build.gradle.kts
+
+      - name: Fix Java and Kotlin JVM targets
         working-directory: MAXXA_AI_Project
         run: |
           python3 - <<'PY'
@@ -44,10 +53,19 @@ jobs:
 
           p = Path("app/build.gradle.kts")
           s = p.read_text()
-          s = s.replace("JavaVersion.VERSION_1_8", "JavaVersion.VERSION_17")
-          s = s.replace('jvmTarget = "1.8"', 'jvmTarget = "17"')
+
+          s = s.replace(
+              "JavaVersion.VERSION_1_8",
+              "JavaVersion.VERSION_17"
+          )
+          s = s.replace(
+              'jvmTarget = "1.8"',
+              'jvmTarget = "17"'
+          )
+
           p.write_text(s)
-          print("Java and Kotlin targets updated")
+          print("Updated app/build.gradle.kts")
+          print(s)
           PY
 
       - name: Build debug APK
@@ -60,4 +78,4 @@ jobs:
           name: MAXXA-AI-APK
           path: MAXXA_AI_Project/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-
+          retention-days: 7
