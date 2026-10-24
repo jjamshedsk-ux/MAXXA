@@ -34,8 +34,21 @@ jobs:
       - name: Install Android SDK packages
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Extract MAXXA AI project
+            - name: Extract MAXXA AI project
         run: unzip -o MAXXA_AI_Project.zip
+        - name: Fix Java and Kotlin targets
+        working-directory: MAXXA_AI_Project
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("app/build.gradle.kts")
+          s = p.read_text()
+          s = s.replace("JavaVersion.VERSION_1_8", "JavaVersion.VERSION_17")
+          s = s.replace('jvmTarget = "1.8"', 'jvmTarget = "17"')
+          p.write_text(s)
+          print("Java and Kotlin targets updated")
+          PY
 
       - name: Build debug APK
         working-directory: MAXXA_AI_Project
