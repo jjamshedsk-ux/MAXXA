@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Android APK
+    name: Build MAXXA AI Android APK
     runs-on: ubuntu-latest
 
     steps:
@@ -31,25 +31,43 @@ jobs:
 
       - name: Check ZIP file
         run: |
-          ls -la
-          test -f MAXXA_AI_Gemini_Updated.zip
+          ls -lh
+          test -f MAXXA_AI_Gemini_JVM_Fixed.zip
 
       - name: Extract Android project
         run: |
           mkdir -p project
-          unzip -o MAXXA_AI_Gemini_Updated.zip -d project
-          find project -name settings.gradle -o -name settings.gradle.kts
+          unzip -o MAXXA_AI_Gemini_JVM_Fixed.zip -d project
+          echo "Project files:"
+          find project -maxdepth 4 -type f | head -100
+
+      - name: Find Android project
+        id: project
+        shell: bash
+        run: |
+          SETTINGS_FILE=$(find project -type f \
+            \( -name settings.gradle -o -name settings.gradle.kts \) \
+            -print -quit)
+
+          if [ -z "$SETTINGS_FILE" ]; then
+            echo "ERROR: Gradle settings file not found."
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$SETTINGS_FILE")
+
+          if [ ! -d "$PROJECT_DIR/app" ]; then
+            echo "ERROR: app module not found in $PROJECT_DIR"
+            exit 1
+          fi
+
+          echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+          echo "Project directory: $PROJECT_DIR"
 
       - name: Build debug APK
         run: |
-          PROJECT_DIR="$(find project -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit | xargs dirname)"
-          if [ -z "$PROJECT_DIR" ] || [ ! -d "$PROJECT_DIR/app" ]; then
-            echo "ERROR: Android project folder or app module not found."
-            exit 1
-          fi
-          echo "Building project in: $PROJECT_DIR"
-          cd "$PROJECT_DIR"
-          gradle assembleDebug
+          cd "${{ steps.project.outputs.dir }}"
+          gradle assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -57,3 +75,4 @@ jobs:
           name: MAXXA-AI-APK
           path: project/**/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+          retention-days: 7
