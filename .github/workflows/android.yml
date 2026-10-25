@@ -12,14 +12,14 @@ permissions:
 
 jobs:
   build:
-    name: Build Android APK
+    name: Build MAXXA AI
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -35,38 +35,28 @@ jobs:
         with:
           packages: 'platform-tools'
 
-      - name: Install Android SDK packages
+      - name: Install Android SDK
         run: |
           sdkmanager "platforms;android-35" "build-tools;35.0.0"
           yes | sdkmanager --licenses
 
-      - name: Extract MAXXA AI project
+      - name: Extract project ZIP
         run: |
           unzip -o MAXXA_AI_Project.zip
           test -f MAXXA_AI_Project/app/build.gradle.kts
 
-      - name: Fix Java and Kotlin JVM targets
+      - name: Fix Kotlin JVM target
         working-directory: MAXXA_AI_Project
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
+          cat >> app/build.gradle.kts <<'EOF'
 
-          p = Path("app/build.gradle.kts")
-          s = p.read_text()
-
-          s = s.replace(
-              "JavaVersion.VERSION_1_8",
-              "JavaVersion.VERSION_17"
-          )
-          s = s.replace(
-              'jvmTarget = "1.8"',
-              'jvmTarget = "17"'
-          )
-
-          p.write_text(s)
-          print("Updated app/build.gradle.kts")
-          print(s)
-          PY
+          // Match Kotlin target to Java 1.8
+          tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+              kotlinOptions {
+                  jvmTarget = "1.8"
+              }
+          }
+          EOF
 
       - name: Build debug APK
         working-directory: MAXXA_AI_Project
