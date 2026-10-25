@@ -1,0 +1,66 @@
+name: Build MAXXA AI from ZIP
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Find and extract project ZIP
+        run: |
+          ZIP_FILE=$(find . -maxdepth 1 -type f -name "*.zip" | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: Repository root mein ZIP file nahi mili."
+            exit 1
+          fi
+
+          mkdir extracted
+          unzip -q "$ZIP_FILE" -d extracted
+
+          if [ ! -f extracted/settings.gradle.kts ]; then
+            ROOT=$(find extracted -name settings.gradle.kts -print -quit)
+
+            if [ -z "$ROOT" ]; then
+              echo "ERROR: settings.gradle.kts nahi mili."
+              exit 1
+            fi
+
+            ROOT=$(dirname "$ROOT")
+          else
+            ROOT="extracted"
+          fi
+
+          cp -a "$ROOT"/. .
+
+          if [ ! -f settings.gradle.kts ] || [ ! -f app/build.gradle.kts ]; then
+            echo "ERROR: Android project files missing hain."
+            exit 1
+          fi
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build debug APK
+        run: gradle assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MAXXA-AI-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
