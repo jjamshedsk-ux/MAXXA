@@ -32,36 +32,24 @@ jobs:
         shell: bash
         run: |
           set -e
-
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -n 1)"
-
           if [ -z "$SDKMANAGER" ]; then
             echo "ERROR: Android SDK manager not found"
             exit 1
           fi
-
-          echo "Using SDK manager: $SDKMANAGER"
-
           yes | "$SDKMANAGER" --licenses || true
-
-          "$SDKMANAGER" \
-            "platforms;android-35" \
-            "build-tools;35.0.0" \
-            "platform-tools"
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
       - name: Extract project ZIP if needed
         shell: bash
         run: |
           set -e
-
           if [ ! -f "settings.gradle" ] && [ ! -f "settings.gradle.kts" ]; then
             ZIP_FILE="$(find . -maxdepth 2 -type f -iname '*.zip' | head -n 1)"
-
             if [ -z "$ZIP_FILE" ]; then
               echo "ERROR: No Gradle project or ZIP file found."
               exit 1
             fi
-
             mkdir -p extracted
             unzip -o "$ZIP_FILE" -d extracted
           fi
@@ -70,24 +58,57 @@ jobs:
         shell: bash
         run: |
           set -e
-
           if [ -f "settings.gradle" ] || [ -f "settings.gradle.kts" ]; then
             PROJECT_DIR="."
           else
-            SETTINGS="$(find extracted -type f \
-              \( -name settings.gradle -o -name settings.gradle.kts \) \
-              | head -n 1)"
-
+            SETTINGS="$(find extracted -type f \( -name settings.gradle -o -name settings.gradle.kts \) | head -n 1)"
             if [ -z "$SETTINGS" ]; then
               echo "ERROR: ZIP does not contain settings.gradle or settings.gradle.kts"
               exit 1
             fi
-
             PROJECT_DIR="$(dirname "$SETTINGS")"
           fi
-
           echo "Project directory: $PROJECT_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Fix Kotlin Compose configuration
+        shell: bash
+        run: |
+          set -e
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          root = Path(os.environ["PROJECT_DIR"])
+          app = root / "app" / "build.gradle.kts"
+
+          if not app.exists():
+              print("No app/build.gradle.kts found; skipping automatic Compose patch.")
+              raise SystemExit(0)
+
+          text = app.read_text()
+
+          if "org.jetbrains.kotlin.plugin.compose" not in text:
+              match = re.search(r'plugins\s*\{', text)
+              if not match:
+                  raise SystemExit("ERROR: No plugins block in app/build.gradle.kts")
+              insert_at = match.end()
+              text = (
+                  text[:insert_at]
+                  + '\n    id("org.jetbrains.kotlin.plugin.compose") version "2.0.21"'
+                  + text[insert_at:]
+              )
+
+          text = re.sub(
+              r'\n\s*composeOptions\s*\{\s*kotlinCompilerExtensionVersion\s*=\s*["\'][^"\']+["\']\s*\}',
+              '',
+              text
+          )
+
+          app.write_text(text)
+          print("Applied Compose configuration patch.")
+          PY
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
