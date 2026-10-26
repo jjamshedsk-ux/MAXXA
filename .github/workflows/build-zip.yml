@@ -1,4 +1,4 @@
-name: Build MAXXA AI Complete Project
+name: Build MAXXA AI APK
 
 on:
   workflow_dispatch:
@@ -11,55 +11,41 @@ permissions:
 
 jobs:
   build:
-    name: Build MAXXA AI APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set Up Java 17
+      - name: Set up Java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set Up Android SDK
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Accept Android SDK Licenses
+      - name: Accept Android SDK licenses
         run: |
-          yes | sdkmanager --licenses || true
+          set +o pipefail
+          yes | sdkmanager --licenses
+          true
 
-      - name: Install Android SDK Packages
+      - name: Install Android SDK packages
         run: |
           sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Set Up Gradle
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build Debug APK
+      - name: Build APK
         run: gradle --no-daemon assembleDebug
 
-      - name: Prepare APK ZIP
-        run: |
-          mkdir -p release
-          cp app/build/outputs/apk/debug/app-debug.apk release/MAXXA-AI-debug.apk
-          cd release
-          zip MAXXA-AI-APK.zip MAXXA-AI-debug.apk
-
-      - name: Upload APK Artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: MAXXA-AI-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Upload APK ZIP Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: MAXXA-AI-APK-ZIP
-          path: release/MAXXA-AI-APK.zip
           if-no-files-found: error
           retention-days: 7
