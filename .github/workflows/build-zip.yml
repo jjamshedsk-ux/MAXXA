@@ -11,8 +11,12 @@ permissions:
 
 jobs:
   build:
-    name: Extract Project and Build APK
+    name: Build MAXXA AI APK
     runs-on: ubuntu-latest
+
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
 
     steps:
       - name: Checkout repository
@@ -24,64 +28,84 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Locate and extract project ZIP
+      - name: Install Android SDK
         shell: bash
         run: |
-          set -euo pipefail
+          set -e
 
-          ZIP_FILE="$(find . -maxdepth 2 -type f -iname '*.zip' | head -n 1)"
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -n 1)"
 
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: Repository mein koi ZIP file nahi mili."
+          if [ -z "$SDKMANAGER" ]; then
+            echo "ERROR: Android SDK manager not found"
             exit 1
           fi
 
-          echo "ZIP found: $ZIP_FILE"
-          mkdir -p extracted
-          unzip -o "$ZIP_FILE" -d extracted
+          echo "Using SDK manager: $SDKMANAGER"
 
-          echo "Extracted files:"
-          find extracted -maxdepth 4 -type f | head -n 100
+          yes | "$SDKMANAGER" --licenses || true
 
-      - name: Find Android Gradle project
+          "$SDKMANAGER" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "platform-tools"
+
+      - name: Extract project ZIP if needed
         shell: bash
         run: |
-          set -euo pipefail
+          set -e
 
-          SETTINGS="$(find extracted -type f \
-            \( -name settings.gradle -o -name settings.gradle.kts \) \
-            | head -n 1)"
+          if [ ! -f "settings.gradle" ] && [ ! -f "settings.gradle.kts" ]; then
+            ZIP_FILE="$(find . -maxdepth 2 -type f -iname '*.zip' | head -n 1)"
 
-          if [ -z "$SETTINGS" ]; then
-            echo "ERROR: ZIP mein settings.gradle ya settings.gradle.kts nahi mili."
-            echo "ZIP ke andar valid Android Gradle project hona zaroori hai."
-            exit 1
+            if [ -z "$ZIP_FILE" ]; then
+              echo "ERROR: No Gradle project or ZIP file found."
+              exit 1
+            fi
+
+            mkdir -p extracted
+            unzip -o "$ZIP_FILE" -d extracted
           fi
 
-          PROJECT_DIR="$(dirname "$SETTINGS")"
+      - name: Locate Android project
+        shell: bash
+        run: |
+          set -e
+
+          if [ -f "settings.gradle" ] || [ -f "settings.gradle.kts" ]; then
+            PROJECT_DIR="."
+          else
+            SETTINGS="$(find extracted -type f \
+              \( -name settings.gradle -o -name settings.gradle.kts \) \
+              | head -n 1)"
+
+            if [ -z "$SETTINGS" ]; then
+              echo "ERROR: ZIP does not contain settings.gradle or settings.gradle.kts"
+              exit 1
+            fi
+
+            PROJECT_DIR="$(dirname "$SETTINGS")"
+          fi
+
           echo "Project directory: $PROJECT_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK packages
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Build debug APK
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: gradle --no-daemon assembleDebug
+      - name: Build APK
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+          gradle --no-daemon assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: MAXXA-AI-debug-apk
           path: |
+            app/build/outputs/apk/debug/*.apk
             extracted/**/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
