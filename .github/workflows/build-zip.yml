@@ -47,7 +47,6 @@ jobs:
 
           mkdir -p extracted
           unzip -o "$ZIP_FILE" -d extracted
-
           echo "ZIP extracted: $ZIP_FILE"
 
       - name: Locate Android project
@@ -55,9 +54,7 @@ jobs:
         run: |
           set -e
 
-          SETTINGS="$(find extracted -type f \
-            \( -name settings.gradle -o -name settings.gradle.kts \) \
-            -not -path '*/.gradle/*' | head -n 1)"
+          SETTINGS="$(find extracted -type f \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) -not -path '*/.gradle/*' | head -n 1)"
 
           if [ -z "$SETTINGS" ]; then
             echo "ERROR: settings.gradle(.kts) missing from ZIP."
@@ -71,8 +68,7 @@ jobs:
             exit 1
           fi
 
-          if [ ! -f "$PROJECT_DIR/build.gradle" ] && \
-             [ ! -f "$PROJECT_DIR/build.gradle.kts" ]; then
+          if [ ! -f "$PROJECT_DIR/build.gradle" ] && [ ! -f "$PROJECT_DIR/build.gradle.kts" ]; then
             echo "ERROR: Root build.gradle(.kts) missing."
             exit 1
           fi
@@ -85,8 +81,7 @@ jobs:
         run: |
           set -e
 
-          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" \
-            -name sdkmanager -type f | head -n 1)"
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -n 1)"
 
           if [ -z "$SDKMANAGER" ]; then
             echo "ERROR: Android sdkmanager not found."
@@ -105,7 +100,6 @@ jobs:
         run: |
           set -e
           cd "$PROJECT_DIR"
-
           gradle --no-daemon assembleDebug
 
       - name: Find APK
@@ -113,8 +107,7 @@ jobs:
         run: |
           set -e
 
-          APK="$(find "$PROJECT_DIR" -type f \
-            -path '*/build/outputs/apk/debug/*.apk' | head -n 1)"
+          APK="$(find "$PROJECT_DIR" -type f -path '*/build/outputs/apk/debug/*.apk' | head -n 1)"
 
           if [ -z "$APK" ]; then
             echo "ERROR: APK not generated."
