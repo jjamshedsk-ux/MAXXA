@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build:
-    name: Build MAXXA AI APK
+    name: Build Android APK
     runs-on: ubuntu-latest
 
     env:
@@ -28,6 +28,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
       - name: Extract source ZIP
         shell: bash
         run: |
@@ -43,7 +48,7 @@ jobs:
           mkdir -p extracted
           unzip -o "$ZIP_FILE" -d extracted
 
-          echo "Source ZIP extracted."
+          echo "ZIP extracted: $ZIP_FILE"
 
       - name: Locate Android project
         shell: bash
@@ -55,7 +60,7 @@ jobs:
             -not -path '*/.gradle/*' | head -n 1)"
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: settings.gradle or settings.gradle.kts missing."
+            echo "ERROR: settings.gradle(.kts) missing from ZIP."
             exit 1
           fi
 
@@ -66,12 +71,14 @@ jobs:
             exit 1
           fi
 
-          if [ ! -f "$PROJECT_DIR/gradlew" ]; then
-            echo "ERROR: Gradle wrapper missing."
+          if [ ! -f "$PROJECT_DIR/build.gradle" ] && \
+             [ ! -f "$PROJECT_DIR/build.gradle.kts" ]; then
+            echo "ERROR: Root build.gradle(.kts) missing."
             exit 1
           fi
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Android project found: $PROJECT_DIR"
 
       - name: Install Android SDK
         shell: bash
@@ -82,7 +89,7 @@ jobs:
             -name sdkmanager -type f | head -n 1)"
 
           if [ -z "$SDKMANAGER" ]; then
-            echo "ERROR: sdkmanager not found."
+            echo "ERROR: Android sdkmanager not found."
             exit 1
           fi
 
@@ -93,22 +100,34 @@ jobs:
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-
       - name: Build Debug APK
         shell: bash
         run: |
           set -e
           cd "$PROJECT_DIR"
 
-          chmod +x ./gradlew
-          ./gradlew --no-daemon assembleDebug
+          gradle --no-daemon assembleDebug
+
+      - name: Find APK
+        shell: bash
+        run: |
+          set -e
+
+          APK="$(find "$PROJECT_DIR" -type f \
+            -path '*/build/outputs/apk/debug/*.apk' | head -n 1)"
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK not generated."
+            exit 1
+          fi
+
+          mkdir -p "$GITHUB_WORKSPACE/apk-output"
+          cp "$APK" "$GITHUB_WORKSPACE/apk-output/MAXXA-AI-debug.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: MAXXA-AI-debug-apk
-          path: extracted/**/app/build/outputs/apk/debug/*.apk
+          path: apk-output/MAXXA-AI-debug.apk
           if-no-files-found: error
           retention-days: 7
