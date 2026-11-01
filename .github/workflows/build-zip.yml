@@ -2,6 +2,7 @@ name: Build MAXXA AI APK
 
 on:
   workflow_dispatch:
+
   push:
     branches:
       - main
@@ -19,69 +20,82 @@ jobs:
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
 
     steps:
+      # 1. Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 2. Setup Java
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle
+      # 3. Setup Gradle
+      - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
+      # 4. Extract latest fixed source ZIP
       - name: Extract source ZIP
         shell: bash
         run: |
           set -e
 
-          ZIP_FILE="$(find . -maxdepth 2 -type f -iname '*.zip' | head -n 1)"
+          ZIP_FILE="./MAXXA_AI_KOTLIN_ERRORS_FIXED_SOURCE.zip"
 
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: Source ZIP not found."
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ERROR: Latest fixed source ZIP not found."
+            echo "Upload MAXXA_AI_KOTLIN_ERRORS_FIXED_SOURCE.zip to repository root."
             exit 1
           fi
 
           mkdir -p extracted
           unzip -o "$ZIP_FILE" -d extracted
-          echo "ZIP extracted: $ZIP_FILE"
 
+          echo "Source ZIP extracted successfully."
+
+      # 5. Locate Android project
       - name: Locate Android project
         shell: bash
         run: |
           set -e
 
-          SETTINGS="$(find extracted -type f \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) -not -path '*/.gradle/*' | head -n 1)"
+          SETTINGS="$(find extracted -type f \( \
+            -name 'settings.gradle' -o \
+            -name 'settings.gradle.kts' \
+          \) -not -path '*/.gradle/*' | head -n 1)"
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: settings.gradle(.kts) missing from ZIP."
+            echo "ERROR: settings.gradle(.kts) not found."
             exit 1
           fi
 
           PROJECT_DIR="$(dirname "$SETTINGS")"
 
           if [ ! -d "$PROJECT_DIR/app" ]; then
-            echo "ERROR: app module missing."
+            echo "ERROR: app module not found."
             exit 1
           fi
 
-          if [ ! -f "$PROJECT_DIR/build.gradle" ] && [ ! -f "$PROJECT_DIR/build.gradle.kts" ]; then
-            echo "ERROR: Root build.gradle(.kts) missing."
+          if [ ! -f "$PROJECT_DIR/build.gradle" ] && \
+             [ ! -f "$PROJECT_DIR/build.gradle.kts" ]; then
+            echo "ERROR: Root build.gradle(.kts) not found."
             exit 1
           fi
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
           echo "Android project found: $PROJECT_DIR"
 
+      # 6. Install Android SDK components
       - name: Install Android SDK
         shell: bash
         run: |
           set -e
 
-          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -n 1)"
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" \
+            -type f -name sdkmanager | head -n 1)"
 
           if [ -z "$SDKMANAGER" ]; then
             echo "ERROR: Android sdkmanager not found."
@@ -95,28 +109,38 @@ jobs:
             "platforms;android-35" \
             "build-tools;35.0.0"
 
+      # 7. Build APK
       - name: Build Debug APK
         shell: bash
         run: |
           set -e
+
           cd "$PROJECT_DIR"
+
           gradle --no-daemon assembleDebug
 
+      # 8. Locate APK
       - name: Find APK
         shell: bash
         run: |
           set -e
 
-          APK="$(find "$PROJECT_DIR" -type f -path '*/build/outputs/apk/debug/*.apk' | head -n 1)"
+          APK="$(find "$PROJECT_DIR" -type f \
+            -path '*/build/outputs/apk/debug/*.apk' | head -n 1)"
 
           if [ -z "$APK" ]; then
-            echo "ERROR: APK not generated."
+            echo "ERROR: APK was not generated."
             exit 1
           fi
 
           mkdir -p "$GITHUB_WORKSPACE/apk-output"
-          cp "$APK" "$GITHUB_WORKSPACE/apk-output/MAXXA-AI-debug.apk"
 
+          cp "$APK" \
+            "$GITHUB_WORKSPACE/apk-output/MAXXA-AI-debug.apk"
+
+          echo "APK copied successfully."
+
+      # 9. Upload APK artifact
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
