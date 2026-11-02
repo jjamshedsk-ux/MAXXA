@@ -1,0 +1,64 @@
+PASS: Android application element exists
+PASS: cleartext traffic disabled
+PASS: AccessibilityService declared
+PASS: AccessibilityService is system-bound
+PASS: AccessibilityService exported for Android binding
+PASS: Accessibility cannot retrieve window content
+PASS: Accessibility cannot perform gestures
+PASS: Accessibility event scope is minimized
+PASS: phone action mapping exists: GLOBAL_ACTION_BACK
+PASS: phone action mapping exists: GLOBAL_ACTION_HOME
+PASS: phone action mapping exists: GLOBAL_ACTION_RECENTS
+PASS: phone action mapping exists: GLOBAL_ACTION_NOTIFICATIONS
+PASS: phone action mapping exists: GLOBAL_ACTION_QUICK_SETTINGS
+PASS: no screen scraping or gesture automation APIs in service
+PASS: Android SDK levels configured
+PASS: Android/Kotlin plugin versions pinned
+PASS: CI Java and Gradle versions configured
+PASS: CI builds and uploads debug APK artifact
+PASS: backend source present: backend/app.js
+PASS: backend source present: backend/server.js
+PASS: backend source present: backend/test/app.test.js
+All offline source-contract checks passed. This does not prove Kotlin compilation or runtime behavior.
+PASS: system Back closes the drawer or returns to Home
+PASS: main content uses adaptive centered width and screen-size insets
+PASS: primary bottom navigation and drawer rows have minimum touch targets
+PASS: navigation drawer destinations are defined
+PASS: all drawer destinations have explicit screen routes
+PASS: screen changes use animated page transitions
+PASS: Android chat uses the streaming backend endpoint
+PASS: stream chunks are applied synchronously on the Android main thread
+PASS: chat feature source exists: conversation manager
+PASS: chat feature source exists: rename dialog
+PASS: chat feature source exists: retry action
+PASS: chat feature source exists: regenerate action
+PASS: chat feature source exists: edit action
+PASS: chat feature source exists: Markdown table rendering
+PASS: chat feature source exists: Markdown headings
+PASS: chat feature source exists: Markdown list rendering
+PASS: chat loading indicator and in-flight interaction guard exist
+PASS: retry is limited to the latest failed or interrupted assistant response
+PASS: regenerate is limited to the latest assistant response
+PASS: conversation history and active thread are persisted locally
+PASS: backend streaming route cleans up client disconnect listener
+PASS: voice assistant has explicit Idle/Listening/Processing/Speaking state machine
+PASS: voice state transition exists: listening stage
+PASS: voice state transition exists: processing stage
+PASS: voice state transition exists: speaking stage
+PASS: voice state transition exists: idle/reset stage
+PASS: recognized speech is automatically submitted without Send tap
+PASS: voice answer waits for completed Gemini stream before TTS playback
+PASS: TTS completion callback returns voice UI to idle
+PASS: Stop Voice cancels recognition and stops speech playback
+PASS: Stop Voice requests cancellation of the voice response coroutine
+PASS: Stop Voice actively disconnects an in-flight streaming HTTP request
+PASS: voice streaming checks cancellation before sending and while reading chunks
+PASS: Hinglish mode allows recognizer language auto-detection instead of forcing Hindi
+PASS: voice controls and Stop button follow the explicit voice stage
+PASS: voice error handling covers permission error
+PASS: voice error handling covers speech network timeout
+PASS: voice error handling covers no speech match
+PASS: voice error handling covers recognizer busy
+PASS: voice error handling covers permission denial message
+PASS: English and Hindi locale preferences are configured; Hinglish uses Hindi locale fallback
+PASS: voice UI reference asset is present

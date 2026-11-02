@@ -1,0 +1,11 @@
+MAXXA AI — GitHub upload instructions
+
+1. Extract this ZIP on your device.
+2. Open your GitHub repository and choose Add file > Upload files.
+3. Upload the CONTENTS of the extracted folder (app/, backend/, settings.gradle.kts, build.gradle.kts, gradle.properties, and .github/). Do not upload the ZIP as a single repository file.
+4. Commit the changes to the main branch.
+5. Open Actions > Build MAXXA AI APK > Run workflow (or wait for the push run).
+6. If the build fails, share the complete first Kotlin/Gradle error from the Actions log.
+
+The workflow uses Java 17 and Gradle 8.9 and builds app:assembleDebug.
+The ZIP archive has been integrity-checked. Android compilation has not been verified in this environment.

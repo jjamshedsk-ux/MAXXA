@@ -1,0 +1,3 @@
+<resources>
+    <string name="maxxa_accessibility_description">Runs only the navigation actions you explicitly tap in MAXXA AI: Back, Home, Recents, Notifications and Quick Settings. It does not read screen content, inspect other apps, or perform taps and typing.</string>
+</resources>

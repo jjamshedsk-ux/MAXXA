@@ -1,0 +1,119 @@
+name: Build MAXXA AI
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'app/**'
+      - 'backend/**'
+      - '*.gradle.kts'
+      - 'gradle.properties'
+      - 'settings.gradle.kts'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'app/**'
+      - 'backend/**'
+      - '*.gradle.kts'
+      - 'gradle.properties'
+      - 'settings.gradle.kts'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-check:
+    name: Backend syntax and tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Configure npm retries
+        run: |
+          npm config set fetch-retries 5
+          npm config set fetch-retry-mintimeout 20000
+          npm config set fetch-retry-maxtimeout 120000
+          npm config set fetch-timeout 300000
+      - name: Install backend dependencies
+        run: npm install --no-audit --no-fund --prefer-offline
+      - name: Check JavaScript syntax
+        run: node --check app.js && node --check server.js
+      - name: Run backend tests
+        run: npm test
+
+  android-build:
+    name: Build Android debug APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install Android 15 build components
+        run: |
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+          sdkmanager --list_installed
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Run offline source-contract checks
+        run: python3 scripts/verify_source.py
+      - name: Verify toolchain
+        run: |
+          java -version
+          gradle --version
+          sdkmanager --list_installed
+      - name: Build debug APK
+        run: |
+          java -version
+          gradle --version
+          gradle --no-daemon --stacktrace clean assembleDebug
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MAXXA-AI-debug-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  android-emulator-smoke:
+    name: Install and launch on Android emulator
+    runs-on: ubuntu-latest
+    needs: android-build
+    steps:
+      - name: Download debug APK
+        uses: actions/download-artifact@v4
+        with:
+          name: MAXXA-AI-debug-APK
+          path: artifacts
+      - name: Boot Android 15 emulator and smoke test app
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            adb install -r artifacts/app-debug.apk
+            adb shell am force-stop com.maxxa.ai || true
+            adb shell monkey -p com.maxxa.ai -c android.intent.category.LAUNCHER 1
+            sleep 12
+            adb shell pidof com.maxxa.ai
+            if adb logcat -d -t 4000 | grep -E 'FATAL EXCEPTION|AndroidRuntime' | grep -q 'com.maxxa.ai'; then
+              echo 'MAXXA AI crashed during emulator launch.'
+              exit 1
+            fi

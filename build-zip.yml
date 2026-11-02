@@ -1,0 +1,112 @@
+name: Build MAXXA AI APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build MAXXA AI APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK components
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+          sdkmanager --list_installed
+
+      - name: Extract source ZIP and locate Gradle project
+        id: project
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f "settings.gradle" ] || [ -f "settings.gradle.kts" ]; then
+            PROJECT_DIR="$GITHUB_WORKSPACE"
+          else
+            mapfile -t ZIPS < <(find "$GITHUB_WORKSPACE" -maxdepth 2 -type f -iname '*.zip' -not -path '*/.git/*' | sort)
+            if [ "${#ZIPS[@]}" -eq 0 ]; then
+              echo "ERROR: No Gradle project at repository root and no source ZIP was found."
+              exit 1
+            fi
+            if [ "${#ZIPS[@]}" -gt 1 ]; then
+              echo "ERROR: More than one ZIP was found. Keep only the intended MAXXA source ZIP in the repository root."
+              printf '%s\n' "${ZIPS[@]}"
+              exit 1
+            fi
+            mkdir -p "$GITHUB_WORKSPACE/extracted"
+            unzip -q -o "${ZIPS[0]}" -d "$GITHUB_WORKSPACE/extracted"
+            SETTINGS="$(find "$GITHUB_WORKSPACE/extracted" -type f \( -name settings.gradle -o -name settings.gradle.kts \) -not -path '*/.gradle/*' | head -n 1 || true)"
+            if [ -z "$SETTINGS" ]; then
+              echo "ERROR: The uploaded ZIP does not contain settings.gradle or settings.gradle.kts."
+              echo "A buildable Android project must include the root Gradle settings/build files, app module, and required Gradle configuration."
+              echo "The workflow cannot create missing project files automatically."
+              echo "ZIP contents (first 100 entries):"
+              find "$GITHUB_WORKSPACE/extracted" -maxdepth 4 -type f | sort | head -n 100
+              exit 1
+            fi
+            PROJECT_DIR="$(dirname "$SETTINGS")"
+          fi
+
+          if [ ! -f "$PROJECT_DIR/app/build.gradle" ] && [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
+            echo "ERROR: Gradle settings found, but app/build.gradle(.kts) is missing."
+            exit 1
+          fi
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+          echo "Using Android project: $PROJECT_DIR"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+          java -version
+          gradle --version
+          gradle --no-daemon --stacktrace clean assembleDebug
+
+      - name: Collect APK
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/apk-artifact"
+          find "$PROJECT_DIR" -type f -path '*/build/outputs/apk/debug/*.apk' -exec cp {} "$GITHUB_WORKSPACE/apk-artifact/" \;
+          if ! find "$GITHUB_WORKSPACE/apk-artifact" -maxdepth 1 -type f -name '*.apk' | grep -q .; then
+            echo "ERROR: Build completed but no debug APK was found."
+            exit 1
+          fi
+          ls -lh "$GITHUB_WORKSPACE/apk-artifact"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MAXXA-AI-debug-apk
+          path: apk-artifact/*.apk
+          if-no-files-found: error
+          retention-days: 7
