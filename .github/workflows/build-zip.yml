@@ -45,65 +45,103 @@ jobs:
           ROOT="$GITHUB_WORKSPACE"
           APP="$ROOT/app"
 
-          # If the app module already exists, keep its original structure.
           if [ -f "$APP/build.gradle.kts" ]; then
             echo "Existing Android app module found."
 
-          # Otherwise reconstruct it from files uploaded directly to repository root.
           elif [ -f "$ROOT/MainActivity.kt" ]; then
-            echo "Reconstructing app module from extracted source files."
+            echo "Reconstructing Android project."
 
             mkdir -p "$APP/src/main/java/com/maxxa/ai"
             mkdir -p "$APP/src/main/res/drawable"
             mkdir -p "$APP/src/main/res/drawable-nodpi"
             mkdir -p "$APP/src/main/res/xml"
+            mkdir -p "$APP/src/main/res/values"
             mkdir -p "$APP/src/main/assets"
 
-            for FILE in MainActivity.kt AiCore3D.kt CodingWorkspacePage.kt MaxxaAccessibilityService.kt CharacterThemeStore.kt; do
+            # Copy Kotlin source files
+            for FILE in \
+              MainActivity.kt \
+              AiCore3D.kt \
+              CodingWorkspacePage.kt \
+              MaxxaAccessibilityService.kt \
+              CharacterThemeStore.kt
+            do
               if [ -f "$ROOT/$FILE" ]; then
                 cp "$ROOT/$FILE" "$APP/src/main/java/com/maxxa/ai/"
               fi
             done
 
+            # Copy Android manifest
             if [ -f "$ROOT/AndroidManifest.xml" ]; then
-              cp "$ROOT/AndroidManifest.xml" "$APP/src/main/AndroidManifest.xml"
+              cp "$ROOT/AndroidManifest.xml" \
+                "$APP/src/main/AndroidManifest.xml"
             fi
 
-            if [ -f "$ROOT/colors.xml" ]; then
-              mkdir -p "$APP/src/main/res/values"
-              cp "$ROOT/colors.xml" "$APP/src/main/res/values/"
-            fi
+            # Copy values resources
+            for FILE in colors.xml strings.xml; do
+              if [ -f "$ROOT/$FILE" ]; then
+                cp "$ROOT/$FILE" "$APP/src/main/res/values/"
+              fi
+            done
 
-            if [ -f "$ROOT/strings.xml" ]; then
-              mkdir -p "$APP/src/main/res/values"
-              cp "$ROOT/strings.xml" "$APP/src/main/res/values/"
-            fi
-
+            # Copy accessibility service XML
             if [ -f "$ROOT/maxxa_accessibility_service.xml" ]; then
-              cp "$ROOT/maxxa_accessibility_service.xml" "$APP/src/main/res/xml/"
+              cp "$ROOT/maxxa_accessibility_service.xml" \
+                "$APP/src/main/res/xml/"
             fi
 
+            # Copy image assets
             for FILE in "$ROOT"/*.png "$ROOT"/*.webp; do
               [ -f "$FILE" ] || continue
+
               NAME="$(basename "$FILE")"
+
               case "$NAME" in
                 maxxa_ai_icon_original.png|maxxa_ui_reference.png)
                   cp "$FILE" "$APP/src/main/assets/"
                   ;;
+
                 ic_launcher*.png|maxxa_logo.png)
                   cp "$FILE" "$APP/src/main/res/drawable/"
                   ;;
+
                 *)
                   cp "$FILE" "$APP/src/main/res/drawable-nodpi/"
                   ;;
               esac
             done
 
-            if [ -f "$ROOT/ic_launcher.xml" ]; then
-              mkdir -p "$APP/src/main/res/mipmap-anydpi-v26"
-              cp "$ROOT/ic_launcher.xml" "$APP/src/main/res/mipmap-anydpi-v26/"
+            # Create adaptive launcher icon
+            if [ -f "$ROOT/ic_launcher_foreground.png" ]; then
+              cp "$ROOT/ic_launcher_foreground.png" \
+                "$APP/src/main/res/drawable/ic_launcher_foreground.png"
             fi
 
+            if [ -f "$ROOT/ic_launcher.png" ]; then
+              cp "$ROOT/ic_launcher.png" \
+                "$APP/src/main/res/drawable/ic_launcher.png"
+            fi
+
+            # Create launcher background color
+            cat > "$APP/src/main/res/values/ic_launcher_background.xml" <<'XML'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <color name="ic_launcher_background">#090909</color>
+          </resources>
+          XML
+
+            # Create corrected adaptive icon XML
+            mkdir -p "$APP/src/main/res/mipmap-anydpi-v26"
+
+            cat > "$APP/src/main/res/mipmap-anydpi-v26/ic_launcher.xml" <<'XML'
+          <?xml version="1.0" encoding="utf-8"?>
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@color/ic_launcher_background"/>
+              <foreground android:drawable="@drawable/ic_launcher_foreground"/>
+          </adaptive-icon>
+          XML
+
+            # Create app module Gradle file
             cat > "$APP/build.gradle.kts" <<'GRADLE'
           plugins {
               id("com.android.application")
@@ -140,25 +178,28 @@ jobs:
           dependencies {
               implementation("androidx.core:core-ktx:1.15.0")
               implementation("androidx.activity:activity-compose:1.10.0")
+
               implementation(platform("androidx.compose:compose-bom:2025.01.00"))
               implementation("androidx.compose.ui:ui")
               implementation("androidx.compose.ui:ui-graphics")
               implementation("androidx.compose.ui:ui-tooling-preview")
               implementation("androidx.compose.material3:material3")
+
               implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
               implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+
               implementation("androidx.biometric:biometric:1.1.0")
+
               debugImplementation("androidx.compose.ui:ui-tooling")
           }
           GRADLE
 
           else
-            echo "ERROR: No app/build.gradle.kts and no root MainActivity.kt found."
-            echo "Upload the extracted MAXXA Android source files to the repository."
+            echo "ERROR: Android source files not found."
             exit 1
           fi
 
-          # Validate the Android project before compiling.
+          # Validate project structure
           test -f "$ROOT/settings.gradle.kts"
           test -f "$ROOT/build.gradle.kts"
           test -f "$APP/build.gradle.kts"
@@ -166,7 +207,7 @@ jobs:
           test -f "$APP/src/main/java/com/maxxa/ai/MainActivity.kt"
 
           echo "Android project structure:"
-          find "$APP/src/main" -maxdepth 5 -type f | sort
+          find "$APP/src/main" -type f | sort
 
       - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
@@ -177,15 +218,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cd "$GITHUB_WORKSPACE"
           gradle --no-daemon --stacktrace assembleDebug
 
       - name: Verify APK
         shell: bash
         run: |
           set -euo pipefail
-          APK="$GITHUB_WORKSPACE/app/build/outputs/apk/debug/app-debug.apk"
-          test -f "$APK"
+
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+
+          if [ ! -f "$APK" ]; then
+            echo "APK not found."
+            exit 1
+          fi
+
+          echo "APK build successful:"
           ls -lh "$APK"
 
       - name: Upload APK
