@@ -3,16 +3,17 @@ name: Build MAXXA AI APK
 on:
   workflow_dispatch:
   push:
-    paths:
-      - "*.zip"
-      - ".github/workflows/build-zip.yml"
+    branches:
+      - main
 
 permissions:
   contents: read
 
 jobs:
   build:
+    name: Build MAXXA AI APK
     runs-on: ubuntu-latest
+    timeout-minutes: 40
 
     steps:
       - name: Checkout repository
@@ -31,72 +32,166 @@ jobs:
           log-accepted-android-sdk-licenses: "false"
 
       - name: Install Android SDK packages
+        shell: bash
         run: |
+          set -euo pipefail
           sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Install Gradle 8.9
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.9"
-
-      - name: Find and extract source ZIP
+      - name: Prepare Android project from extracted files
         shell: bash
         run: |
           set -euo pipefail
 
-          ZIP_FILE="./MAXXA_AI_SINGLE_UPLOAD.zip"
+          ROOT="$GITHUB_WORKSPACE"
+          APP="$ROOT/app"
 
-          if [ ! -f "$ZIP_FILE" ]; then
-            echo "ERROR: Source ZIP not found: $ZIP_FILE"
-            echo "Available repository files:"
-            ls -la
-            exit 1
-          fi
+          # If the app module already exists, keep its original structure.
+          if [ -f "$APP/build.gradle.kts" ]; then
+            echo "Existing Android app module found."
 
-          mkdir -p extracted
-          unzip -o "$ZIP_FILE" -d extracted
+          # Otherwise reconstruct it from files uploaded directly to repository root.
+          elif [ -f "$ROOT/MainActivity.kt" ]; then
+            echo "Reconstructing app module from extracted source files."
 
-          echo "ZIP extracted successfully."
+            mkdir -p "$APP/src/main/java/com/maxxa/ai"
+            mkdir -p "$APP/src/main/res/drawable"
+            mkdir -p "$APP/src/main/res/drawable-nodpi"
+            mkdir -p "$APP/src/main/res/xml"
+            mkdir -p "$APP/src/main/assets"
 
-          PROJECT_DIR=""
+            for FILE in MainActivity.kt AiCore3D.kt CodingWorkspacePage.kt MaxxaAccessibilityService.kt CharacterThemeStore.kt; do
+              if [ -f "$ROOT/$FILE" ]; then
+                cp "$ROOT/$FILE" "$APP/src/main/java/com/maxxa/ai/"
+              fi
+            done
 
-          while IFS= read -r file; do
-            candidate="$(dirname "$file")"
-
-            if [ -f "$candidate/app/build.gradle.kts" ]; then
-              PROJECT_DIR="$candidate"
-              break
+            if [ -f "$ROOT/AndroidManifest.xml" ]; then
+              cp "$ROOT/AndroidManifest.xml" "$APP/src/main/AndroidManifest.xml"
             fi
-          done < <(find extracted -name settings.gradle.kts -type f)
 
-          if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: Android Gradle project not found."
-            find extracted -maxdepth 5 -type f | head -200
+            if [ -f "$ROOT/colors.xml" ]; then
+              mkdir -p "$APP/src/main/res/values"
+              cp "$ROOT/colors.xml" "$APP/src/main/res/values/"
+            fi
+
+            if [ -f "$ROOT/strings.xml" ]; then
+              mkdir -p "$APP/src/main/res/values"
+              cp "$ROOT/strings.xml" "$APP/src/main/res/values/"
+            fi
+
+            if [ -f "$ROOT/maxxa_accessibility_service.xml" ]; then
+              cp "$ROOT/maxxa_accessibility_service.xml" "$APP/src/main/res/xml/"
+            fi
+
+            for FILE in "$ROOT"/*.png "$ROOT"/*.webp; do
+              [ -f "$FILE" ] || continue
+              NAME="$(basename "$FILE")"
+              case "$NAME" in
+                maxxa_ai_icon_original.png|maxxa_ui_reference.png)
+                  cp "$FILE" "$APP/src/main/assets/"
+                  ;;
+                ic_launcher*.png|maxxa_logo.png)
+                  cp "$FILE" "$APP/src/main/res/drawable/"
+                  ;;
+                *)
+                  cp "$FILE" "$APP/src/main/res/drawable-nodpi/"
+                  ;;
+              esac
+            done
+
+            if [ -f "$ROOT/ic_launcher.xml" ]; then
+              mkdir -p "$APP/src/main/res/mipmap-anydpi-v26"
+              cp "$ROOT/ic_launcher.xml" "$APP/src/main/res/mipmap-anydpi-v26/"
+            fi
+
+            cat > "$APP/build.gradle.kts" <<'GRADLE'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+              id("org.jetbrains.kotlin.plugin.compose")
+          }
+
+          android {
+              namespace = "com.maxxa.ai"
+              compileSdk = 35
+
+              defaultConfig {
+                  applicationId = "com.maxxa.ai"
+                  minSdk = 26
+                  targetSdk = 35
+                  versionCode = 1
+                  versionName = "1.0.0"
+              }
+
+              buildFeatures {
+                  compose = true
+              }
+
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          }
+
+          dependencies {
+              implementation("androidx.core:core-ktx:1.15.0")
+              implementation("androidx.activity:activity-compose:1.10.0")
+              implementation(platform("androidx.compose:compose-bom:2025.01.00"))
+              implementation("androidx.compose.ui:ui")
+              implementation("androidx.compose.ui:ui-graphics")
+              implementation("androidx.compose.ui:ui-tooling-preview")
+              implementation("androidx.compose.material3:material3")
+              implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+              implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+              implementation("androidx.biometric:biometric:1.1.0")
+              debugImplementation("androidx.compose.ui:ui-tooling")
+          }
+          GRADLE
+
+          else
+            echo "ERROR: No app/build.gradle.kts and no root MainActivity.kt found."
+            echo "Upload the extracted MAXXA Android source files to the repository."
             exit 1
           fi
 
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Project found: $PROJECT_DIR"
+          # Validate the Android project before compiling.
+          test -f "$ROOT/settings.gradle.kts"
+          test -f "$ROOT/build.gradle.kts"
+          test -f "$APP/build.gradle.kts"
+          test -f "$APP/src/main/AndroidManifest.xml"
+          test -f "$APP/src/main/java/com/maxxa/ai/MainActivity.kt"
 
-      - name: Verify Android project
-        run: |
-          test -f "$PROJECT_DIR/settings.gradle.kts"
-          test -f "$PROJECT_DIR/build.gradle.kts"
-          test -f "$PROJECT_DIR/app/build.gradle.kts"
-          echo "Android project structure verified."
+          echo "Android project structure:"
+          find "$APP/src/main" -maxdepth 5 -type f | sort
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
 
       - name: Build debug APK
+        shell: bash
         run: |
-          cd "$PROJECT_DIR"
-          gradle --no-daemon --stacktrace --version
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
           gradle --no-daemon --stacktrace assembleDebug
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$GITHUB_WORKSPACE/app/build/outputs/apk/debug/app-debug.apk"
+          test -f "$APK"
+          ls -lh "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MAXXA-AI-debug-APK
-          path: "${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk"
+          name: MAXXA-AI-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+          retention-days: 7
