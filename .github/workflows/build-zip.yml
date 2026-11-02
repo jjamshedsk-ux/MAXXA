@@ -25,15 +25,19 @@ jobs:
           java-version: "17"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools"
+          log-accepted-android-sdk-licenses: "false"
 
       - name: Install Android SDK packages
         run: |
-          sdkmanager "platform-tools"
-          sdkmanager "platforms;android-35"
-          sdkmanager "build-tools;35.0.0"
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
@@ -46,18 +50,17 @@ jobs:
           ZIP_FILE="./MAXXA_AI_SINGLE_UPLOAD.zip"
 
           if [ ! -f "$ZIP_FILE" ]; then
-            echo "ERROR: $ZIP_FILE not found in repository root."
-            echo "Available ZIP files:"
-            find . -maxdepth 2 -type f -iname "*.zip"
+            echo "ERROR: Source ZIP not found: $ZIP_FILE"
+            echo "Available repository files:"
+            ls -la
             exit 1
           fi
 
           mkdir -p extracted
-          unzip -q "$ZIP_FILE" -d extracted
+          unzip -o "$ZIP_FILE" -d extracted
 
           echo "ZIP extracted successfully."
 
-          echo "Searching for Gradle project..."
           PROJECT_DIR=""
 
           while IFS= read -r file; do
@@ -70,18 +73,25 @@ jobs:
           done < <(find extracted -name settings.gradle.kts -type f)
 
           if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: Android Gradle project structure not found."
-            echo "Expected settings.gradle.kts and app/build.gradle.kts."
-            find extracted -maxdepth 4 -type f | head -200
+            echo "ERROR: Android Gradle project not found."
+            find extracted -maxdepth 5 -type f | head -200
             exit 1
           fi
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Android project found: $PROJECT_DIR"
+          echo "Project found: $PROJECT_DIR"
+
+      - name: Verify Android project
+        run: |
+          test -f "$PROJECT_DIR/settings.gradle.kts"
+          test -f "$PROJECT_DIR/build.gradle.kts"
+          test -f "$PROJECT_DIR/app/build.gradle.kts"
+          echo "Android project structure verified."
 
       - name: Build debug APK
         run: |
           cd "$PROJECT_DIR"
+          gradle --no-daemon --stacktrace --version
           gradle --no-daemon --stacktrace assembleDebug
 
       - name: Upload APK
